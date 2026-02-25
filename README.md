@@ -35,7 +35,7 @@ The boot is **tethered** — the iPad must be connected to a host computer via U
 
 ```bash
 # Clone
-git clone https://github.com/YOUR_USER/ipad-nixos.git
+git clone https://github.com/jacopone/ipad-nixos.git
 cd ipad-nixos
 
 # Build kernel (~4-5 hours first time, cached after)

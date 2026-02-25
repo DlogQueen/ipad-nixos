@@ -23,7 +23,7 @@ If you have an iPad with an A7–A11 chip (2013–2017), your hardware reports a
 
 ### What to Work On
 
-Check the [Issues](https://github.com/YOUR_USER/ipad-nixos/issues) tab. Priority areas:
+Check the [Issues](https://github.com/jacopone/ipad-nixos/issues) tab. Priority areas:
 
 | Area | Difficulty | Impact |
 |------|-----------|--------|

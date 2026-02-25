@@ -11,13 +11,25 @@
 
   outputs = { self, nixpkgs, devenv, ... }@inputs:
     let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
+      buildSystem = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${buildSystem};
+
+      # Cross-compilation: build on x86_64, target aarch64 (iPad ARM64)
+      pkgsCross = import nixpkgs {
+        localSystem.system = buildSystem;
+        crossSystem.system = "aarch64-linux";
+      };
     in
     {
-      devShells.${system}.default = devenv.lib.mkShell {
+      # Dev shell (x86_64 tools for RE, flashing, serial, etc.)
+      devShells.${buildSystem}.default = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [ ./devenv.nix ];
+      };
+
+      # Cross-compiled packages for iPad (aarch64, 16KB pages)
+      packages.${buildSystem} = {
+        kernel = pkgsCross.callPackage ./kernel {};
       };
     };
 }

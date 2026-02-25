@@ -8,7 +8,7 @@ Research conducted February 2026.
 | Subsystem | Chip | Linux Driver | Status | Effort |
 |-----------|------|-------------|--------|--------|
 | Display | LG LP097QX2 (eDP) | simplefb / simpledrm | Working (basic) | Low |
-| Touch | Broadcom BCM5976 | None (proprietary) | None | High |
+| Touch | Broadcom BCM5976 | apple_z2 (adapt) | Documented (Z2 protocol) | Medium-High |
 | WiFi | Broadcom BCM4354 (Murata module) | brcmfmac | Partial | Medium |
 | GPU | PowerVR GXA6850 (Series 6XT) | pvr (Mesa) | Experimental | Very High |
 | Audio | Cirrus Logic 338S1213 | None known | None | High |
@@ -93,39 +93,58 @@ The BCM5976 is used across iPhone 5 through 6 Plus, iPad Air 1/2, iPad Mini 1-4,
 
 ### Linux Driver Status
 
-**Status: None**
+**Status: None (direct), but the protocol is now documented via the Z2 driver in Linux 6.15**
 
-No open-source Linux driver exists for the BCM5976. The chip communicates over SPI using a
-proprietary protocol. Existing approaches:
+No dedicated Linux driver exists for the BCM5976. However, the situation has improved
+dramatically since the initial research:
 
-- **Project Sandcastle (iPhone 7)**: Corellium wrote a userspace daemon called `hx-touchd`
-  that interfaces with the iPhone's touch controller. The iPhone 7 uses a different touch IC
-  (not BCM5976), so this daemon is not directly reusable for iPad Air 2.
-- **No kernel driver**: The Linux kernel has no driver for BCM5976.
-- **No reverse engineering documentation**: The SPI protocol for BCM5976 is not publicly
-  documented.
+- **apple_z2 kernel driver (Linux 6.15)**: Asahi Linux merged a driver for Apple's Z2
+  touch protocol. Z2 is described as "the primary protocol for the touchscreen on mobile
+  Apple devices." The finger data format in apple_z2 is structurally identical to the
+  BCM5974 (USB MacBook) and applespi (SPI MacBook) drivers, confirming a protocol family
+  spanning 2008-2024.
+- **Project Sandcastle hx-touchd**: Corellium's userspace daemon for iPhone 7 uses Z2
+  commands (0xE1-0xEE range) consistent with the apple_z2 driver's command set. The touch
+  controller was described as "not very complex to interface with."
+- **lemonjesus iPad touch project**: A Raspberry Pi Pico-based project that successfully
+  drives an iPad 3 touchscreen by replaying captured Z2 initialization sequences. Confirms
+  the Z2 protocol name and approach for older iPad models.
+
+### Z2 Protocol Summary
+
+- 16-byte command frames with 2-byte checksum
+- Read interrupt command: 0xEB + counter + padding + checksum
+- Control commands: 0xE1-0xEE (firmware upload, status, wake)
+- Finger reports: 32 bytes per finger with abs_x/y, rel_x/y, tool_major/minor,
+  orientation, touch_major/minor, pressure (identical to BCM5974 format)
+- SPI max frequency: ~11.5 MHz
+- Firmware: Z2FW container format, uploaded during initialization
+- Calibration: per-device blob, loaded during firmware upload
+
+See research/touch-re.md for complete protocol documentation.
 
 ### Path to Working
 
-1. Identify the SPI bus and chip-select used by BCM5976 on the A8X (from iOS device tree or
-   reverse engineering)
-2. Capture SPI traffic between the A8X and BCM5976 (requires logic analyzer on hardware or
-   iOS kernel instrumentation)
-3. Reverse engineer the initialization sequence and touch report format
-4. Write a Linux input driver (kernel module using the SPI subsystem and input_dev framework)
-
-Alternatively, adapt `hx-touchd` from Project Sandcastle if the protocol has commonalities
-with the iPhone 7 touch controller.
+1. **Analyze IPSW firmware** — extract AppleMultitouchSPI.kext and multitouch firmware from
+   iPad Air 2 IPSW using ipsw tool + Ghidra with ghidra_kernelcache framework
+2. **Verify protocol** — use lemonjesus Pico approach to capture and replay Z2 init sequence
+3. **Write A8X SPI driver** — Samsung-derived SPI controller (not the M-series apple,spi);
+   Corellium wrote one for A10 in linux-sandcastle
+4. **Adapt apple_z2 driver** — add iPad Air 2 device tree bindings, BCM5976-specific quirks
+5. **Extract firmware from IPSW** — adapt Asahi Linux multitouch.py extraction pipeline
 
 ### Estimated Effort
 
-High. Requires reverse engineering a proprietary SPI protocol with no public documentation.
-The BCM5976 was widely used across many Apple devices, so a successful driver would benefit
-multiple device ports.
+Medium-High (reduced from High). The Z2 protocol is now documented through three independent
+sources (apple_z2 kernel driver, hx-touchd, lemonjesus project). The remaining work is
+A8X SPI controller bring-up and BCM5976-specific adaptation.
 
 Sources:
-- https://microsolderingsupply.com/index.php?route=product/product&product_id=257
-- https://github.com/corellium/projectsandcastle
+- https://patchwork.kernel.org/project/linux-arm-kernel/patch/20241128-z2-v2-2-76cc59bbf117@gmail.com/
+- https://github.com/corellium/projectsandcastle/tree/master/hx-touchd
+- https://github.com/lemonjesus/ipad-touch-screen
+- https://github.com/AsahiLinux/asahi-installer/blob/main/asahi_firmware/multitouch.py
+- https://github.com/torvalds/linux/blob/master/drivers/input/mouse/bcm5974.c
 
 ---
 
@@ -626,7 +645,7 @@ Sources:
 
 | Subsystem | Status | Notes |
 |-----------|--------|-------|
-| Touch | No driver | BCM5976 proprietary SPI protocol |
+| Touch | Z2 protocol documented | Adapt apple_z2 driver + A8X SPI controller |
 | Audio | No driver | Unknown Cirrus Logic codec, custom audio DMA |
 | PMIC | No driver | Custom Dialog chip 343S0675 |
 | Sensors | Unknown | May work if directly on I2C, problematic if via M8 |

@@ -19,7 +19,7 @@ LOAD_LINUX="${LOAD_LINUX:-$SCRIPT_DIR/load_linux.py}"
 PONGO_BIN="${PONGO_BIN:-$SCRIPT_DIR/Pongo.bin}"
 KERNEL="${KERNEL:-$PROJECT_DIR/result/Image.lzma}"
 DTBPACK="${DTBPACK:-$SCRIPT_DIR/dtbpack}"
-INITRAMFS="${INITRAMFS:-$PROJECT_DIR/result-initramfs/initramfs.cpio.lzma}"
+INITRAMFS="${INITRAMFS:-$PROJECT_DIR/result-initramfs/initrd}"
 CMDLINE="${CMDLINE:-console=tty0 earlycon loglevel=7 root=/dev/ram0}"
 
 echo "iPad NixOS — Boot Script"

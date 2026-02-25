@@ -49,7 +49,7 @@ let
     #!/bin/ash
     # PID 1 — this process must not exit.
 
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+    export PATH=/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 
     # ---- pseudo-filesystems ------------------------------------------------
     mount -t proc     proc     /proc
@@ -329,67 +329,49 @@ makeInitrdNG {
       source = "${staticBusybox}/sbin";
       target = "/sbin";
     }
-    {
-      source = "${staticBusybox}/usr/bin";
-      target = "/usr/bin";
-    }
-    {
-      source = "${staticBusybox}/usr/sbin";
-      target = "/usr/sbin";
-    }
 
     # ---- dropbear SSH -------------------------------------------------------
     # dropbear is dynamically linked against musl (from pkgsCrossMusl).
-    # makeInitrdNG's Rust tool reads the ELF NEEDED entries:
-    #   dropbear → libz.so.1 → /nix/store/<hash>-zlib-aarch64/lib/libz.so.1
-    #           → libcrypt.so.2 → /nix/store/<hash>-libxcrypt-aarch64/.../libcrypt.so.2
-    # The musl dynamic linker path is in PT_INTERP:
-    #   /nix/store/<hash>-musl-aarch64/lib/ld-musl-aarch64.so.1
-    # All of these get copied into the cpio at their exact /nix/store/... paths.
-    # No patchelf needed.
+    # makeInitrdNG's Rust tool reads the ELF NEEDED entries and copies all
+    # shared library deps into the cpio at their /nix/store/... paths.
+    #
+    # These go in /usr/local/bin to avoid collision with BusyBox's /bin
+    # (which is a read-only symlink to the BusyBox store path).
     {
       source = "${dropbear}/bin/dropbear";
-      target = "/bin/dropbear";
+      target = "/usr/local/bin/dropbear";
     }
     {
       source = "${dropbear}/bin/dropbearkey";
-      target = "/bin/dropbearkey";
+      target = "/usr/local/bin/dropbearkey";
     }
     {
       source = "${dropbear}/bin/dbclient";
-      target = "/bin/dbclient";
+      target = "/usr/local/bin/dbclient";
     }
 
     # ---- kmod ---------------------------------------------------------------
-    # modprobe is needed to load:
-    #   - g_ether (USB gadget fallback)
-    #   - brcmfmac (WiFi, Phase 1+)
-    #   - cfg80211 (WiFi stack)
-    #   - btbcm (Bluetooth)
-    # kmod's shared lib (libkmod) is handled automatically by makeInitrdNG.
-    #
-    # kmod installs one multi-call binary; modprobe/lsmod/insmod/rmmod are
-    # symlinks to it.  Copying the symlinks works because makeInitrdNG follows
-    # them to find the underlying kmod binary and its deps.
+    # modprobe is needed for g_ether, brcmfmac, btbcm, etc.
+    # Also in /usr/local/bin to avoid /bin collision.
     {
       source = "${kmod}/bin/kmod";
-      target = "/bin/kmod";
+      target = "/usr/local/bin/kmod";
     }
     {
       source = "${kmod}/bin/modprobe";
-      target = "/bin/modprobe";
+      target = "/usr/local/bin/modprobe";
     }
     {
       source = "${kmod}/bin/lsmod";
-      target = "/bin/lsmod";
+      target = "/usr/local/bin/lsmod";
     }
     {
       source = "${kmod}/bin/insmod";
-      target = "/bin/insmod";
+      target = "/usr/local/bin/insmod";
     }
     {
       source = "${kmod}/bin/rmmod";
-      target = "/bin/rmmod";
+      target = "/usr/local/bin/rmmod";
     }
   ];
   # makeInitrdNG pre-creates: /run, /tmp, /var/empty, /var/run → ../run

@@ -44,7 +44,8 @@ for entry in "$@"; do
     printf '%s\0' "$BOARD_ID" >> "$OUTPUT"
 
     # DTB size (4 bytes, big-endian)
-    printf '%08x' "$SIZE" | xxd -r -p >> "$OUTPUT"
+    # Use printf with octal escapes instead of xxd for portability
+    printf "\\x$(printf '%08x' "$SIZE" | cut -c1-2)\\x$(printf '%08x' "$SIZE" | cut -c3-4)\\x$(printf '%08x' "$SIZE" | cut -c5-6)\\x$(printf '%08x' "$SIZE" | cut -c7-8)" >> "$OUTPUT"
 
     # DTB data
     cat "$DTB_PATH" >> "$OUTPUT"

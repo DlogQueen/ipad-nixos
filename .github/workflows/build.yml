@@ -1,0 +1,103 @@
+name: Build iPad Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Build kernel
+        run: nix build .#kernel --print-build-logs
+
+      - name: Build initramfs
+        run: nix build .#initramfs --print-build-logs
+
+      - name: Prepare output dir
+        run: mkdir -p output/dtbs
+
+      - name: Copy kernel and compress
+        run: |
+          cp result/Image output/Image
+          lzma -z -k -9 -c result/Image > output/Image.lzma
+          echo "Kernel: $(wc -c < output/Image) bytes"
+          echo "Compressed: $(wc -c < output/Image.lzma) bytes"
+
+      - name: Copy initramfs
+        run: |
+          cp result/initrd output/initrd
+          echo "Initramfs: $(wc -c < output/initrd) bytes"
+
+      - name: Build device trees
+        run: |
+          # Install cross-compiler
+          nix shell nixpkgs#pkgsCross.aarch64-multiplatform.buildPackages.gcc --command echo "Cross-compiler ready"
+
+          # Get kernel source path
+          nix build .#kernel --no-link 2>/dev/null
+          KSRC=$(find /nix/store -maxdepth 1 -name "*-linux-6.19.3" -type d 2>/dev/null | head -1)
+
+          if [ -z "$KSRC" ]; then
+            # Download kernel source directly
+            wget -q https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.19.3.tar.xz
+            tar xf linux-6.19.3.tar.xz
+            KSRC="$PWD/linux-6.19.3"
+          fi
+
+          # Build DTBs
+          cd "$KSRC"
+          make ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu- -j$(nproc) dtbs 2>&1 || true
+
+          # Copy DTBs we need
+          cd "$OLDPWD"
+          for dtb_path in \
+            "s8000-j71s.dtb" "s8000-j71t.dtb" "s8000-j72s.dtb" "s8000-j72t.dtb" \
+            "s5l8960x-j71.dtb" "s5l8960x-j72.dtb" "s5l8960x-j73.dtb"; do
+            find "$KSRC/arch/arm64/boot/dts/apple" -name "$dtb_path" -exec cp {} output/dtbs/ \; 2>/dev/null || true
+          done
+
+          echo "=== DTBs found ==="
+          ls -la output/dtbs/
+
+      - name: Create dtbpacks
+        run: |
+          # A9 iPad (A1822) — J71s/J72s
+          if [ -f output/dtbs/s8000-j71s.dtb ]; then
+            bash boot/mkdtbpack.sh output/dtbpack-a1822 \
+              J71s:output/dtbs/s8000-j71s.dtb \
+              J72s:output/dtbs/s8000-j72s.dtb
+          fi
+
+          # A7 iPad (A1458) — J71/J72
+          if [ -f output/dtbs/s5l8960x-j71.dtb ]; then
+            bash boot/mkdtbpack.sh output/dtbpack-a1458 \
+              J71:output/dtbs/s5l8960x-j71.dtb \
+              J72:output/dtbs/s5l8960x-j72.dtb
+          fi
+
+          ls -la output/dtbpack-*
+
+      - name: Copy boot files
+        run: |
+          cp boot/Pongo.bin output/
+          cp boot/load_linux.py output/
+          cp boot/flash.sh output/
+          cp boot/flash-ipad.sh output/
+          chmod +x output/flash-ipad.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-linux-bundle
+          path: output/
+          retention-days: 7
